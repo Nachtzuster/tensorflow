@@ -128,11 +128,12 @@ class NpuAccelerator final {
                   kLiteRtStatusErrorInvalidArgument,
                   "Accelerator is not registered to an environment.");
 
-    LITERT_ASSIGN_OR_RETURN(const auto* compilation_data,
-                            GetModelCompilationData(options));
-    const char* allocation_base = compilation_data->allocation_base;
+    LITERT_ASSIGN_OR_RETURN(
+        const litert::internal::ModelCompilationData* compilation_data,
+        GetModelCompilationData(options));
 
-    LITERT_ENSURE(allocation_base != nullptr, kLiteRtStatusErrorRuntimeFailure,
+    LITERT_ENSURE(compilation_data->allocation_base,
+                  kLiteRtStatusErrorRuntimeFailure,
                   "No model allocation was passed by the runtime.");
 
     auto dispatch_delegate_options = litert::CreateDispatchDelegateOptionsPtr(
@@ -143,9 +144,19 @@ class NpuAccelerator final {
 
     LITERT_ENSURE(
         LiteRtDispatchDelegateAddAllocBaseOption(
-            dispatch_delegate_options.get(), allocation_base) == kTfLiteOk,
+            dispatch_delegate_options.get(),
+            compilation_data->allocation_base) == kTfLiteOk,
         kLiteRtStatusErrorRuntimeFailure,
         "Could not add allocation base to dispatch delegate options.");
+
+    if (compilation_data->allocation_fd != -1) {
+      LITERT_ENSURE(LiteRtDispatchDelegateAddAllocFdOption(
+                        dispatch_delegate_options.get(),
+                        compilation_data->allocation_fd) == kTfLiteOk,
+                    kLiteRtStatusErrorRuntimeFailure,
+                    "Could not add allocation file descriptor to dispatch "
+                    "delegate options.");
+    }
 
     auto dispatch_delegate = litert::CreateDispatchDelegatePtr(
         &accelerator->env->GetOptions(), std::move(dispatch_delegate_options));

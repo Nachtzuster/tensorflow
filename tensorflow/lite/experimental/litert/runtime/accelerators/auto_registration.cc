@@ -25,6 +25,7 @@
 #include "tensorflow/lite/experimental/litert/cc/litert_macros.h"
 #include "tensorflow/lite/experimental/litert/cc/litert_shared_library.h"
 #include "tensorflow/lite/experimental/litert/core/environment.h"
+#include "tensorflow/lite/experimental/litert/runtime/accelerators/dispatch/dispatch_accelerator.h"
 
 // Define a weak function to allow the accelerator registration to be overridden
 // by the LiteRT environment.
@@ -41,6 +42,8 @@ namespace litert {
 
 Expected<void> TriggerAcceleratorAutomaticRegistration(
     LiteRtEnvironmentT& environment) {
+  // Register the NPU accelerator.
+  LiteRtRegisterNpuAccelerator(&environment, /*options=*/nullptr);
   // Register the GPU accelerator.
   if (RegisterStaticLinkedAcceleratorGpu(environment)) {
     LITERT_LOG(LITERT_INFO, "Statically linked GPU accelerator registered.");

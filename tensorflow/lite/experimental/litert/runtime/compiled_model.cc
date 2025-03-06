@@ -24,8 +24,6 @@
 
 #include "absl/cleanup/cleanup.h"
 #include "tensorflow/lite/experimental/litert/c/litert_accelerator_options.h"
-#include "tensorflow/lite/experimental/litert/c/litert_environment.h"
-#include "tensorflow/lite/experimental/litert/c/litert_environment_options.h"
 #include "tensorflow/lite/experimental/litert/cc/litert_event.h"
 #include "tensorflow/lite/experimental/litert/cc/litert_macros.h"
 #include "tensorflow/lite/experimental/litert/cc/litert_model.h"
@@ -45,13 +43,11 @@
 #include "tensorflow/lite/delegates/utils/simple_opaque_delegate.h"
 #include "tensorflow/lite/experimental/litert/c/litert_common.h"
 #include "tensorflow/lite/experimental/litert/c/litert_compilation_options.h"
-#include "tensorflow/lite/experimental/litert/c/litert_dispatch_delegate.h"
 #include "tensorflow/lite/experimental/litert/c/litert_logging.h"
 #include "tensorflow/lite/experimental/litert/c/litert_model.h"
 #include "tensorflow/lite/experimental/litert/c/litert_tensor_buffer.h"
 #include "tensorflow/lite/experimental/litert/c/litert_tensor_buffer_requirements.h"
 #include "tensorflow/lite/experimental/litert/cc/litert_buffer_ref.h"
-#include "tensorflow/lite/experimental/litert/cc/litert_dispatch_delegate.h"
 #include "tensorflow/lite/experimental/litert/cc/litert_expected.h"
 #include "tensorflow/lite/experimental/litert/cc/litert_tensor_buffer.h"
 #include "tensorflow/lite/experimental/litert/cc/litert_tensor_buffer_requirements.h"
@@ -127,6 +123,16 @@ class ScopedCompilationOptionsModifier {
  private:
   LiteRtAcceleratorCompilationOptions* last_accelerator_option_ptr_;
 };
+
+int GetAllocationFd(const tflite::Allocation* allocation) {
+  if (allocation != nullptr &&
+      allocation->type() == tflite::Allocation::Type::kMMap) {
+    auto& mmap_allocation =
+        static_cast<const tflite::MMAPAllocation&>(*allocation);
+    return mmap_allocation.fd();
+  }
+  return -1;
+}
 
 }  // namespace
 
@@ -220,13 +226,13 @@ Expected<LiteRtCompiledModelT::Ptr> LiteRtCompiledModelT::Create(
                       "Failed to inizialize compiled model");
   }
 
-  // TODO: b/397399776 - Auto register accelerators
-
   // Add a new link in the accelerator compilation options that holds some data
   // that is computed during model compilation.
   LITERT_ASSIGN_OR_RETURN(auto model_compilation_data,
                           litert::internal::ModelCompilationData::Create());
   model_compilation_data->allocation_base = model_buffer;
+  model_compilation_data->allocation_fd =
+      GetAllocationFd(compiled_model->fb_model_->allocation());
 
   // Temporarily append model_compilation_data to the jit_compilation_options,
   // but remove it before returning from this function since the caller owns
@@ -264,39 +270,6 @@ Expected<LiteRtCompiledModelT::Ptr> LiteRtCompiledModelT::Create(
       compiled_model->RegisterDelegate(std::move(delegate));
     }
   }
-
-  // Apply the dispatch delegate, unconditionally, since the loaded model may
-  // have been compiled for NPU at AOT.
-  // TODO: b/394958439 - Get the DispatchDelegate from the AcceleratorRegistry.
-
-  LiteRtEnvironmentOptions env_options = nullptr;
-  LITERT_RETURN_IF_ERROR(LiteRtGetEnvironmentOptions(env, &env_options));
-
-  auto dispatch_delegate_options =
-      litert::CreateDispatchDelegateOptionsPtr(env_options);
-  LiteRtDispatchDelegateAddAllocBaseOption(dispatch_delegate_options.get(),
-                                           model_buffer);
-
-  auto* allocation = compiled_model->fb_model_->allocation();
-  if (allocation != nullptr &&
-      allocation->type() == tflite::Allocation::Type::kMMap) {
-    auto& mmap_allocation =
-        static_cast<const tflite::MMAPAllocation&>(*allocation);
-    int flatbuffer_fd = mmap_allocation.fd();
-    LiteRtDispatchDelegateAddAllocFdOption(dispatch_delegate_options.get(),
-                                           flatbuffer_fd);
-  }
-
-  auto dispatch_delegate = litert::CreateDispatchDelegatePtr(
-      env_options, std::move(dispatch_delegate_options));
-  if (auto status = compiled_model->interp_->ModifyGraphWithDelegate(
-          dispatch_delegate.get());
-      status != kTfLiteOk) {
-    return Unexpected(kLiteRtStatusErrorRuntimeFailure,
-                      "Failed to modify graph with delegate");
-  }
-
-  compiled_model->RegisterDelegate(std::move(dispatch_delegate));
 
   compiled_model->CheckCpuTensors();
   return compiled_model;
