@@ -22,9 +22,12 @@
 #include "absl/strings/string_view.h"
 #include "absl/types/span.h"
 #include "tensorflow/lite/experimental/litert/c/litert_common.h"
+#include "tensorflow/lite/experimental/litert/c/litert_event.h"
+#include "tensorflow/lite/experimental/litert/c/litert_event_type.h"
 #include "tensorflow/lite/experimental/litert/c/litert_tensor_buffer.h"
 #include "tensorflow/lite/experimental/litert/cc/litert_compiled_model.h"
 #include "tensorflow/lite/experimental/litert/cc/litert_environment.h"
+#include "tensorflow/lite/experimental/litert/cc/litert_event.h"
 #include "tensorflow/lite/experimental/litert/cc/litert_model.h"
 #include "tensorflow/lite/experimental/litert/cc/litert_tensor_buffer.h"
 #include "tensorflow/lite/experimental/litert/test/common.h"
@@ -117,6 +120,94 @@ TEST(CompiledModelGpuTest, Basic2nd) {
   // Run the test twice to verify that the CL environment is shared between
   // instances.
   BasicTest();
+}
+
+TEST(CompiledModelGpuTest, Async) {
+  // MSAN does not support GPU tests.
+#if defined(MEMORY_SANITIZER) || defined(THREAD_SANITIZER)
+  GTEST_SKIP() << "GPU tests are not supported in MSAN";
+#endif
+  // To workaround the memory leak in Nvidia's driver
+  absl::LeakCheckDisabler disable_leak_check;
+
+  auto model = testing::LoadTestFileModel(kModelFileName);
+  ASSERT_TRUE(model);
+
+  auto env = litert::Environment::Create({});
+  ASSERT_TRUE(env);
+
+  auto res_compiled_model =
+      CompiledModel::Create(*env, model, kLiteRtHwAcceleratorGpu);
+  ASSERT_TRUE(res_compiled_model) << "Failed to initialize CompiledModel";
+
+  auto& compiled_model = *res_compiled_model;
+  auto signatures = model.GetSignatures().Value();
+  EXPECT_EQ(signatures.size(), 1);
+
+  auto signature_key = signatures[0].Key();
+  EXPECT_EQ(signature_key, Model::DefaultSignatureKey());
+  size_t signature_index = 0;
+
+  auto input_buffers_res = compiled_model.CreateInputBuffers(signature_index);
+  EXPECT_TRUE(input_buffers_res);
+  auto& input_buffers = *input_buffers_res;
+
+  // TODO: Create input events.
+  // clCreateUserEvent()
+  // And bind them to the input buffers.
+
+  auto input_event_res = Event::CreateManaged(LiteRtEventTypeOpenCl);
+  ASSERT_TRUE(input_event_res);
+
+  // Fill model inputs.
+  auto input_names = signatures[0].InputNames();
+  EXPECT_EQ(input_names.size(), 2);
+  EXPECT_EQ(input_names.at(0), "arg0");
+  EXPECT_EQ(input_names.at(1), "arg1");
+  EXPECT_EQ(*input_buffers[0].BufferType(), kLiteRtTensorBufferTypeOpenCl);
+  ASSERT_TRUE(input_buffers[0].Write<float>(
+      absl::MakeConstSpan(kTestInput0Tensor, kTestInput0Size)));
+  EXPECT_EQ(*input_buffers[1].BufferType(), kLiteRtTensorBufferTypeOpenCl);
+  ASSERT_TRUE(input_buffers[1].Write<float>(
+      absl::MakeConstSpan(kTestInput1Tensor, kTestInput1Size)));
+
+  // Bind the input event to the input buffers.
+  // Note: The task should be done after the input buffers are filled.
+  // Otherwise the input_buffers[0].Write<> will be blocked by the associated
+  // event.
+  auto& input_event = *input_event_res;
+  LiteRtEvent litert_input_event = input_event.Get();
+  for (auto& input_buffer : input_buffers) {
+    input_buffer.SetEvent(litert_input_event, /*transfer_ownership=*/false);
+  }
+
+  auto output_buffers_res = compiled_model.CreateOutputBuffers(signature_index);
+  EXPECT_TRUE(output_buffers_res);
+  auto& output_buffers = *output_buffers_res;
+
+  // Execute model asynchronously.
+  bool async_execution_mode = true;
+  compiled_model.RunAsync(signature_index, input_buffers, output_buffers,
+                          async_execution_mode);
+
+  // Signal the input event to resume the async execution.
+  input_event.Signal();
+
+  // Check model output.
+  auto output_names = signatures[0].OutputNames();
+  EXPECT_EQ(output_names.size(), 1);
+  EXPECT_EQ(output_names.at(0), "tfl.add");
+  EXPECT_EQ(*output_buffers[0].BufferType(), kLiteRtTensorBufferTypeOpenCl);
+  {
+    auto lock_and_addr =
+        litert::TensorBufferScopedLock::Create<const float>(output_buffers[0]);
+    ASSERT_TRUE(lock_and_addr);
+    auto output = absl::MakeSpan(lock_and_addr->second, kTestOutputSize);
+    for (auto i = 0; i < kTestOutputSize; ++i) {
+      ABSL_LOG(INFO) << "Result: " << output[i] << "\t" << kTestOutputTensor[i];
+    }
+    EXPECT_THAT(output, Pointwise(FloatNear(1e-5), kTestOutputTensor));
+  }
 }
 
 }  // namespace

@@ -532,6 +532,7 @@ cc_test(
 #     deps = [
 #         ":litert_compiled_model",
 #         ":litert_environment",
+#         ":litert_event",
 #         ":litert_model",
 #         ":litert_tensor_buffer",
 #         "@com_google_googletest//:gtest_main",
@@ -544,6 +545,8 @@ cc_test(
 #         "//tensorflow/lite/c:c_api_opaque",
 #         "//tensorflow/lite/c:common",
 #         "//tensorflow/lite/experimental/litert/c:litert_common",
+#         "//tensorflow/lite/experimental/litert/c:litert_event",
+#         "//tensorflow/lite/experimental/litert/c:litert_event_type",
 #         "//tensorflow/lite/experimental/litert/c:litert_tensor_buffer",
 #         "//tensorflow/lite/experimental/litert/test:common",
 #         "//tensorflow/lite/experimental/litert/test:simple_model",
@@ -567,6 +570,7 @@ cc_test(
 #     deps = [
 #         ":litert_compiled_model",
 #         ":litert_environment",
+#         ":litert_event",
 #         ":litert_model",
 #         ":litert_tensor_buffer",
 #         "@com_google_googletest//:gtest_main",
