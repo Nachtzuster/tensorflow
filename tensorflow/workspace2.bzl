@@ -918,9 +918,9 @@ def _tf_repositories():
 
     tf_http_archive(
         name = "org_xprof",
-        sha256 = "de191174c2ecfe1ef47570b1567c6b01f6475aacab3ef48bb8553b0cfaa315eb",
-        strip_prefix = "profiler-16e8b2a1a013edfd4da0d22f19a1293befbe1816",
-        urls = tf_mirror_urls("https://github.com/tensorflow/profiler/archive/16e8b2a1a013edfd4da0d22f19a1293befbe1816.zip"),
+        sha256 = "9339003445d0b2c575883bce4b9166e32cd7f55867368dd92a3eda7327a301d9",
+        strip_prefix = "profiler-24d7c2db78d60d85b5c873d9dd1b04c46e69db42",
+        urls = tf_mirror_urls("https://github.com/tensorflow/profiler/archive/24d7c2db78d60d85b5c873d9dd1b04c46e69db42.zip"),
     )
 
     # used for adding androidx.annotation dependencies in tflite android jni.
