@@ -36,6 +36,7 @@ limitations under the License.
 #include "absl/strings/str_split.h"
 #include "absl/strings/string_view.h"
 #include "absl/synchronization/mutex.h"
+#include "absl/time/time.h"
 #include "absl/types/span.h"
 #include "mlir/Dialect/Func/Extensions/AllExtensions.h"
 #include "xla/client/executable_build_options.h"
@@ -560,15 +561,24 @@ absl::Status FunctionalHloRunner::LoadAndRunAndDump(
     absl::string_view hlo_file, InputFormat input_format,
     std::string dump_output_to, int task_id, int num_nodes,
     std::shared_ptr<xla::KeyValueStoreInterface> kv_store) {
+  absl::Time start_time = absl::Now();
   TF_ASSIGN_OR_RETURN(
       CompileOptions compile_options,
       FunctionalHloRunner::CreateCompileOptions(client, raw_compile_options,
                                                 task_id, num_nodes, kv_store));
+  absl::Time compile_time = absl::Now();
+  std::cout << "##compile_options Compile time, file=" << hlo_file
+            << " duration=" << compile_time - start_time << std::endl;
+  absl::Time load_and_run_time_start_time = absl::Now();
   TF_ASSIGN_OR_RETURN(
       FunctionalHloRunner::PerDeviceLiteralVecType output,
       FunctionalHloRunner::LoadAndRun(client, debug_options, preproc_options,
                                       compile_options, running_options,
                                       hlo_file, input_format));
+  absl::Time load_and_run_time = absl::Now();
+  std::cout << "##LoadAndRun Execution time, file=" << hlo_file
+            << " duration=" << load_and_run_time - load_and_run_time_start_time
+            << std::endl;
   return dump_output_to.empty()
              ? absl::OkStatus()
              : FunctionalHloRunner::DumpOutput(output, dump_output_to, task_id);
@@ -589,15 +599,28 @@ FunctionalHloRunner::LoadAndRun(PjRtClient& client,
   // Currently there is no mechanism to map the loaded arguments to
   // proper device ID, so loading and executing from HLO snapshot might not
   // replay the original execution.
+  absl::Time load_hlo_module_and_arguments_time_start_time = absl::Now();
   TF_ASSIGN_OR_RETURN(HloModuleAndArguments hlo_module_and_arguments,
                       LoadHloModuleAndArguments(hlo_file, input_format));
+  absl::Time load_hlo_module_and_arguments_time = absl::Now();
+  std::cout << "##LoadHloModuleAndArguments Execution time, file=" << hlo_file
+            << " duration="
+            << load_hlo_module_and_arguments_time -
+                   load_hlo_module_and_arguments_time_start_time
+            << std::endl;
   // Arguments from `arguments` take precedence over the arguments from a
   // snapshot.
+  absl::Time compile_and_run_time_start_time = absl::Now();
   if (!arguments.empty()) {
     return CompileAndRun(client, debug_options, preproc_options,
                          compile_options, running_options,
                          hlo_module_and_arguments.hlo_module.get(), arguments);
   }
+  absl::Time compile_and_run_time = absl::Now();
+  std::cout << "##CompileAndRun Execution time, file=" << hlo_file
+            << " duration="
+            << compile_and_run_time - compile_and_run_time_start_time
+            << std::endl;
 
   // Check that the number of shards is not greater than the number of
   // devices.
@@ -666,8 +689,13 @@ FunctionalHloRunner::CompileAndRun(PjRtClient& client,
   TF_ASSIGN_OR_RETURN(std::unique_ptr<PjRtLoadedExecutable> executable,
                       Compile(client, hlo_module, debug_options,
                               preproc_options, compile_options));
-
-  return Run(client, executable.get(), arguments, running_options, engine);
+  absl::Time compile_and_run_time = absl::Now();
+  auto result =
+      Run(client, executable.get(), arguments, running_options, engine);
+  absl::Time run_time = absl::Now();
+  std::cout << "##Run Execution time, file=" << hlo_module->name()
+            << " duration=" << run_time - compile_and_run_time << std::endl;
+  return result;
 }
 
 namespace {
@@ -870,11 +898,16 @@ FunctionalHloRunner::Run(PjRtClient& client, PjRtLoadedExecutable* executable,
   auto create_argument_buffers_on_device = [&client, &executable, &arguments,
                                             &running_options, engine](
                                                bool flatten_tupled_arguments) {
+    absl::Time start_time = absl::Now();
     if (arguments.empty()) {
       return CreateArgumentsOnDevice(client, executable, running_options,
                                      flatten_tupled_arguments, engine);
     }
-
+    absl::Time end_time = absl::Now();
+    std::cout << "## CreateArgumentsOnDevice time, flatten_tupled_arguments="
+              << flatten_tupled_arguments
+              << " duration=" << end_time - start_time << std::endl;
+    absl::Time cpy_arguments_start_time = absl::Now();
     if (flatten_tupled_arguments && arguments.begin()->second.size() == 1 &&
         arguments.begin()->second.front().shape().IsTuple()) {
       PerDeviceLiteralVecType flattened_arguments;
@@ -889,14 +922,33 @@ FunctionalHloRunner::Run(PjRtClient& client, PjRtLoadedExecutable* executable,
                                    running_options,
                                    /*flattened_arguments=*/true);
     }
+    absl::Time copy_arguments_end_time = absl::Now();
+    std::cout << "## CopyArgumentsToDevice time, flatten_tupled_arguments="
+              << flatten_tupled_arguments << " duration="
+              << copy_arguments_end_time - cpy_arguments_start_time
+              << std::endl;
     // If the per-device argument is not a single tuple, we ignore the
     // flatten_tupled_arguments parameter and assume the provided arguments have
     // already been flattened.
-    return CopyArgumentsToDevice(client, executable, arguments, running_options,
-                                 /*flattened_arguments=*/false);
+    absl::Time copy_arguments_to_device_start_time = absl::Now();
+    auto result =
+        CopyArgumentsToDevice(client, executable, arguments, running_options,
+                              /*flattened_arguments=*/false);
+    absl::Time copy_arguments_to_device_end_time = absl::Now();
+    std::cout << "## CopyArgumentsToDevice time, flatten_tupled_arguments="
+              << flatten_tupled_arguments << " duration="
+              << copy_arguments_to_device_end_time -
+                     copy_arguments_to_device_start_time
+              << std::endl;
+    return result;
   };
-  return RunInternal(client, executable, create_argument_buffers_on_device,
-                     running_options);
+  absl::Time start_time = absl::Now();
+  auto result = RunInternal(client, executable,
+                            create_argument_buffers_on_device, running_options);
+  absl::Time end_time = absl::Now();
+  std::cout << "## RunInternal time, duration=" << end_time - start_time
+            << std::endl;
+  return result;
 }
 
 namespace {
@@ -996,8 +1048,12 @@ FunctionalHloRunner::RunInternal(
   if (running_options.untuple_result.has_value()) {
     execute_options.untuple_result = *running_options.untuple_result;
   }
+  absl::Time start_time = absl::Now();
   TF_ASSIGN_OR_RETURN(std::vector<std::shared_ptr<HloModule>> hlo_modules,
                       executable->GetHloModules());
+  absl::Time end_time = absl::Now();
+  std::cout << "## GetHloModules time, duration=" << end_time - start_time
+            << std::endl;
   CHECK_EQ(hlo_modules.size(), 1);
   const HloModule& module = *(hlo_modules.front());
   ParameterType parameter_type = GetParameterType(module);
@@ -1035,6 +1091,7 @@ FunctionalHloRunner::RunInternal(
     return 0;
   };
 
+  absl::Time output_buffers_start_time = absl::Now();
   std::vector<std::vector<std::unique_ptr<PjRtBuffer>>> output_buffers;
   auto output_has_tuple_leaf_on_host_memory_space = [&module]() {
     if (!module.result_shape().IsTuple()) {
@@ -1046,6 +1103,9 @@ FunctionalHloRunner::RunInternal(
                  shape.layout().memory_space() == Layout::kHostMemorySpace;
         });
   };
+  absl::Time output_buffers_end_time = absl::Now();
+  std::cout << "## output_has_tuple_leaf_on_host_memory_space time, duration="
+            << output_buffers_end_time - output_buffers_start_time << std::endl;
   // If any output leaf buffer is in host memory, PJRT requires untuple_result.
   bool must_untuple_result = output_has_tuple_leaf_on_host_memory_space();
   bool default_untuple_result =
@@ -1069,6 +1129,7 @@ FunctionalHloRunner::RunInternal(
   if (must_untuple_result) {
     execute_options.untuple_result = true;
   }
+  absl::Time execute_start_time = absl::Now();
   std::optional<std::vector<PjRtFuture<>>> futures;
   futures.emplace();
   std::vector<std::vector<std::unique_ptr<PjRtBuffer>>> device_buffers;
@@ -1082,7 +1143,13 @@ FunctionalHloRunner::RunInternal(
       argument_ptrs.clear();
       TF_ASSIGN_OR_RETURN(device_buffers,
                           create_argument_buffers_on_device(flatten_arguments));
+      absl::Time create_argument_pointers_start_time = absl::Now();
       argument_ptrs = CreateArgumentPointersFromDeviceBuffers(device_buffers);
+      absl::Time create_argument_pointers_end_time = absl::Now();
+      std::cout << "## CreateArgumentPointersFromDeviceBuffers time, duration="
+                << create_argument_pointers_end_time -
+                       create_argument_pointers_start_time
+                << std::endl;
     }
     if (repeat == running_options.num_repeats - 1) {
       execute_options.untuple_result = default_untuple_result;
@@ -1097,9 +1164,13 @@ FunctionalHloRunner::RunInternal(
       execute_options.execution_profile->set_warmup_run_executed(repeat > 0);
     }
     futures->clear();
+    absl::Time execute_start_time = absl::Now();
     TF_ASSIGN_OR_RETURN(
         output_buffers,
         executable->Execute(argument_ptrs, execute_options, futures));
+    absl::Time execute_end_time = absl::Now();
+    std::cout << "## Execute time, duration="
+              << execute_end_time - execute_start_time << std::endl;
     for (auto& future : *futures) {
       TF_RETURN_IF_ERROR(future.Await());
     }
@@ -1124,6 +1195,9 @@ FunctionalHloRunner::RunInternal(
       }
     }
   }
+  absl::Time execute_end_time = absl::Now();
+  std::cout << "## Execute time, duration="
+            << execute_end_time - execute_start_time << std::endl;
 
   TF_ASSIGN_OR_RETURN(PerDeviceLiteralVecType results,
                       FetchAndLogOutput(client, output_buffers,
@@ -1537,26 +1611,25 @@ FunctionalHloRunner::FetchAndLogOutput(
   return outputs;
 }
 
-GPURunnerProfiler::GPURunnerProfiler(absl::string_view dump_path,
+HLORunnerProfiler::HLORunnerProfiler(absl::string_view dump_path,
                                      bool keep_xspace)
     : dump_path_(dump_path), keep_xspace_(keep_xspace) {}
 
-absl::StatusOr<std::unique_ptr<GPURunnerProfiler>> GPURunnerProfiler::Create(
+absl::StatusOr<std::unique_ptr<HLORunnerProfiler>> HLORunnerProfiler::Create(
     absl::string_view dump_path, bool keep_xspace) {
   if (dump_path.empty()) {
     return absl::InvalidArgumentError(
         "Please provide a valid dump path to save XSpace results to disk.");
   }
-  return std::make_unique<GPURunnerProfiler>(dump_path, keep_xspace);
+  return std::make_unique<HLORunnerProfiler>(dump_path, keep_xspace);
 }
 
-void GPURunnerProfiler::CreateSession() {
+void HLORunnerProfiler::CreateSession() {
   auto options = tsl::ProfilerSession::DefaultOptions();
-  options.set_device_type(tensorflow::ProfileOptions::GPU);
   session_ = tsl::ProfilerSession::Create(options);
 }
 
-void GPURunnerProfiler::UploadSession() {
+void HLORunnerProfiler::UploadSession() {
   xspace_ = std::make_unique<tensorflow::profiler::XSpace>();
   // Stops the ProfilerSession
   TF_CHECK_OK(session_->CollectData(xspace_.get()));
@@ -1564,14 +1637,14 @@ void GPURunnerProfiler::UploadSession() {
   CHECK(!dump_path_.empty());
 
   LOG(INFO) << "Saving xspace result to " << dump_path_;
-  // Save in binary format to create xprof sessions and extract device stats.
+
   CHECK_OK(WriteBinaryProto(tsl::Env::Default(), dump_path_, *xspace_.get()));
   if (!keep_xspace_) {
     xspace_ = nullptr;
   }
 }
 
-const tensorflow::profiler::XSpace* GPURunnerProfiler::GetXSpace() {
+const tensorflow::profiler::XSpace* HLORunnerProfiler::GetXSpace() {
   return xspace_.get();
 }
 
