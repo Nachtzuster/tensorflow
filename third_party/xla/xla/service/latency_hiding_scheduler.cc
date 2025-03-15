@@ -2155,6 +2155,12 @@ HloScheduleGraph::HloScheduleGraph(
                 it = nodes_.find(async_start);
                 CHECK(it != nodes_.end());
                 HloGraphNode* start_node = it->second.get();
+                // Ignore token operands as they are not real aliasing.
+                if (use.instruction->operand(use.operand_number)
+                        ->shape()
+                        .IsToken()) {
+                  continue;
+                }
                 // If there is already a transitive link between the nodes the
                 // other way then skip adding this one.
                 if (IsPredecessorTransitively(pred_node, start_node)) {
@@ -2817,6 +2823,7 @@ absl::StatusOr<bool> LatencyHidingScheduler::Run(
   }
 
   if (computations_to_schedule.empty()) {
+    VLOG(0) << "WHY";
     return false;
   }
   absl::flat_hash_map<HloComputation*, std::vector<HloInstruction*>>
