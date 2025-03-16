@@ -14,3 +14,11 @@ bzl_library(
     # copybara:uncomment parse_tests = False,
     visibility = ["//visibility:public"],
 )
+
+# copybara:comment_begin(oss-only)
+py_binary(
+    name = "def_file_filter_tool",
+    srcs = [":def_file_filter_tool.py"],
+    visibility = ["//visibility:public"],
+)
+# copybara:comment_end
