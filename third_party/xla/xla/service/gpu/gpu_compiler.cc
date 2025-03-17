@@ -28,6 +28,7 @@ limitations under the License.
 
 #include "absl/base/call_once.h"
 #include "absl/container/flat_hash_map.h"
+#include "absl/container/flat_hash_set.h"
 #include "absl/log/check.h"
 #include "absl/log/log.h"
 #include "absl/status/status.h"
@@ -584,7 +585,10 @@ absl::Status RunPreSPMDPartitionerPasses(HloModule* hlo_module) {
   // passes.
   pre_spmd_pipeline.AddPass<CuDnnCustomCallConverter>();
   pre_spmd_pipeline.AddPass<ConvertMemoryPlacementToInternalAnnotations>();
-  pre_spmd_pipeline.AddPass<CallInliner>();
+  pre_spmd_pipeline.AddPass<CallInliner>(
+      /*single_call_site=*/false, /*update_domain=*/false,
+      /*composites_to_preserve=*/absl::flat_hash_set<std::string>(),
+      /*uniquify_channel_ids=*/true);
   pre_spmd_pipeline.AddPass<ZeroSizedHloElimination>();
   pre_spmd_pipeline.AddPass<ConditionalCanonicalizer>();
 
@@ -719,7 +723,10 @@ absl::Status RunOptimizationPasses(
 
   pipeline.AddPass<DynamicIndexSplitter>();
 
-  pipeline.AddPass<CallInliner>();
+  pipeline.AddPass<CallInliner>(
+      /*single_call_site=*/false, /*update_domain=*/false,
+      /*composites_to_preserve=*/absl::flat_hash_set<std::string>(),
+      /*uniquify_channel_ids=*/true);
 
   pipeline.AddPass<StochasticConvertDecomposer>();
 
@@ -1632,7 +1639,10 @@ absl::Status GpuCompiler::OptimizeHloPostLayoutAssignment(
     pipeline.AddPass<NestGemmFusion>();
   }
   // Inline back the calls which have better performance with cuBLAS.
-  pipeline.AddPass<CallInliner>();
+  pipeline.AddPass<CallInliner>(
+      /*single_call_site=*/false, /*update_domain=*/false,
+      /*composites_to_preserve=*/absl::flat_hash_set<std::string>(),
+      /*uniquify_channel_ids=*/true);
   // TODO(tdanyluk): Apply CublasPadForGemms to the cuBLAS GEMMs generated
   // here for possibly better cuBLAS performance.
 

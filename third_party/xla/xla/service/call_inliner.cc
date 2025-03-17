@@ -29,6 +29,7 @@ limitations under the License.
 #include "absl/strings/string_view.h"
 #include "xla/hlo/ir/dfs_hlo_visitor_with_default.h"
 #include "xla/hlo/ir/hlo_instruction.h"
+#include "xla/hlo/ir/hlo_instructions.h"
 #include "xla/hlo/ir/hlo_opcode.h"
 #include "xla/hlo/ir/hlo_sharding_metadata.h"
 #include "xla/hlo/transforms/simplifiers/hlo_dce.h"
@@ -39,8 +40,6 @@ limitations under the License.
 #include "xla/status_macros.h"
 #include "xla/util.h"
 #include "xla/xla_data.pb.h"
-#include "tsl/platform/errors.h"
-#include "tsl/platform/statusor.h"
 
 namespace xla {
 namespace {
@@ -282,6 +281,14 @@ absl::StatusOr<bool> CallInliner::Run(
             }
           }
           did_mutate = true;
+        }
+      }
+    }
+    if (uniquify_channel_ids_) {
+      int unique_channel_id = 0;
+      for (HloInstruction* instruction : node.computation()->instructions()) {
+        if (dynamic_cast<HloChannelInstruction*>(instruction)) {
+          instruction->set_channel_id(unique_channel_id++);
         }
       }
     }
