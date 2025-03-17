@@ -243,26 +243,21 @@ Expected<LiteRtCompiledModelT::Ptr> LiteRtCompiledModelT::Create(
   // Apply accelerators matching the requested hardware support to the
   // model in the order they were registered.
   for (auto& accelerator : env->GetAcceleratorRegistry()) {
-    LiteRtHwAcceleratorSet accelerator_supported_hardware;
-    LITERT_RETURN_IF_ERROR(accelerator->GetHardwareSupport(
-        accelerator.get(), &accelerator_supported_hardware));
-    if (hardware_accelerators & accelerator_supported_hardware) {
-      TfLiteOpaqueDelegate* delegate_ptr = nullptr;
-      LITERT_RETURN_IF_ERROR(
-          accelerator->CreateDelegate(accelerator.get(), accelerator_options,
-                                      reinterpret_cast<void**>(&delegate_ptr)));
+    TfLiteOpaqueDelegate* delegate_ptr = nullptr;
+    LITERT_RETURN_IF_ERROR(
+        accelerator->CreateDelegate(accelerator.get(), accelerator_options,
+                                    reinterpret_cast<void**>(&delegate_ptr)));
 
-      auto delegate = tflite::TfLiteOpaqueDelegateUniquePtr(
-          delegate_ptr, reinterpret_cast<void (*)(TfLiteOpaqueDelegate*)>(
-                            accelerator->DestroyDelegate));
+    auto delegate = tflite::TfLiteOpaqueDelegateUniquePtr(
+        delegate_ptr, reinterpret_cast<void (*)(TfLiteOpaqueDelegate*)>(
+                          accelerator->DestroyDelegate));
 
-      if (compiled_model->interp_->ModifyGraphWithDelegate(delegate_ptr) !=
-          kTfLiteOk) {
-        return Unexpected(kLiteRtStatusErrorRuntimeFailure,
-                          "Failed to modify graph with delegate");
-      }
-      compiled_model->RegisterDelegate(std::move(delegate));
+    if (compiled_model->interp_->ModifyGraphWithDelegate(delegate_ptr) !=
+        kTfLiteOk) {
+      return Unexpected(kLiteRtStatusErrorRuntimeFailure,
+                        "Failed to modify graph with delegate");
     }
+    compiled_model->RegisterDelegate(std::move(delegate));
   }
 
   // Apply the dispatch delegate, unconditionally, since the loaded model may
