@@ -367,8 +367,8 @@ HloComputation::GetCallersMap() const {
 HloInstruction* HloComputation::AddInstructionInternal(
     std::unique_ptr<HloInstruction> instruction) {
   if (parent() != nullptr) {
-    instruction->UniquifyName(&parent()->instruction_name_uniquer());
-    instruction->SetUniqueId(parent()->NewUniqueInstructionId());
+    instruction->UniquifyName(parent());
+    instruction->UniquifyId(parent());
   }
   instruction->set_parent(this);
   HloInstruction* pinst = instruction.release();  // Take ownership
