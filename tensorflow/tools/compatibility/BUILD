@@ -22,7 +22,6 @@ py_strict_library(
     srcs_version = "PY3",
     deps = [
         "@pasta",
-        "@six_archive//:six",  # buildcleaner: keep
     ],
 )
 
