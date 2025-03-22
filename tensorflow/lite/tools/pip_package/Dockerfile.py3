@@ -39,7 +39,7 @@ RUN wget https://github.com/bazelbuild/bazelisk/releases/download/v1.15.0/bazeli
 # Install Python packages.
 RUN dpkg --add-architecture armhf
 RUN dpkg --add-architecture arm64
-RUN lsb_release -i -s | grep -q Ubuntu && yes | add-apt-repository ppa:deadsnakes/ppa
+RUN grep -i debian /etc/issue || yes | add-apt-repository ppa:deadsnakes/ppa
 RUN apt-get update && DEBIAN_FRONTEND=noninteractive TZ=Etc/UTC \
     apt-get install -y \
       python$PYTHON_VERSION \
