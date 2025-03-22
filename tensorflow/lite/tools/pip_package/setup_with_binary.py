@@ -47,10 +47,7 @@ setup(
         'Intended Audience :: Science/Research',
         'License :: OSI Approved :: Apache Software License',
         'Programming Language :: Python :: 3',
-        'Programming Language :: Python :: 3.8',
-        'Programming Language :: Python :: 3.9',
-        'Programming Language :: Python :: 3.10',
-        'Programming Language :: Python :: 3.11',
+        'Programming Language :: Python :: 3.13',
         'Topic :: Scientific/Engineering',
         'Topic :: Scientific/Engineering :: Mathematics',
         'Topic :: Scientific/Engineering :: Artificial Intelligence',
@@ -62,7 +59,10 @@ setup(
     package_dir={'': '.'},
     package_data={'': ['*.so', '*.pyd']},
     install_requires=[
-        'numpy >= 1.23.2',  # Better to keep sync with both TF ci_build
+        'numpy >= 2.1.0',  # Better to keep sync with both TF ci_build
         # and OpenCV-Python requirement.
+        # numpy >= 1.23.5' python 3.11
+        # numpy >= 1.26.3' python 3.12
+        # numpy >= 2.1.0' python 3.13
     ],
 )
