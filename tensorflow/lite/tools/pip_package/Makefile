@@ -74,4 +74,6 @@ docker-build: docker-image
 		--rm --interactive $(shell tty -s && echo --tty) \
 		$(DOCKER_PARAMS) \
 		$(TAG_IMAGE) \
-		/with_the_same_user /bin/bash -C /tensorflow/tensorflow/lite/tools/pip_package/build_pip_package_with_cmake.sh $(TENSORFLOW_TARGET)
+		/bin/bash -C /tensorflow/tensorflow/lite/tools/pip_package/build_pip_package_with_bazel.sh $(TENSORFLOW_TARGET)
+
+
