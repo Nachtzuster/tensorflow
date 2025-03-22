@@ -36,6 +36,7 @@ DOCKER_PARAMS := --pid=host \
     --env "WHEEL_PROJECT_NAME=$(WHEEL_PROJECT_NAME)" \
     --env "VERSION_SUFFIX=$(VERSION_SUFFIX)" \
     --volume $(TENSORFLOW_DIR):/tensorflow \
+    --volume $(TENSORFLOW_DIR)/bazel-ci_build-cache:/root/.cache \
     --workdir /tensorflow
 
 ifneq ($(WHEEL_PLATFORM_NAME),)
