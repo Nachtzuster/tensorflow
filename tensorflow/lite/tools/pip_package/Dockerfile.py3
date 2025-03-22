@@ -39,27 +39,28 @@ RUN wget https://github.com/bazelbuild/bazelisk/releases/download/v1.15.0/bazeli
 # Install Python packages.
 RUN dpkg --add-architecture armhf
 RUN dpkg --add-architecture arm64
-RUN yes | add-apt-repository ppa:deadsnakes/ppa
-RUN apt-get update && \
+RUN lsb_release -i -s | grep -q Ubuntu && yes | add-apt-repository ppa:deadsnakes/ppa
+RUN apt-get update && DEBIAN_FRONTEND=noninteractive TZ=Etc/UTC \
     apt-get install -y \
       python$PYTHON_VERSION \
       python$PYTHON_VERSION-dev \
       python$PYTHON_VERSION-venv \
-      python$PYTHON_VERSION-distutils \
       libpython$PYTHON_VERSION-dev \
       libpython$PYTHON_VERSION-dev:armhf \
       libpython$PYTHON_VERSION-dev:arm64
 RUN ln -sf /usr/bin/python$PYTHON_VERSION /usr/bin/python3
 RUN curl -OL https://bootstrap.pypa.io/get-pip.py
+RUN rm -f /usr/lib/python$PYTHON_VERSION/EXTERNALLY-MANAGED
 RUN python3 get-pip.py
 RUN rm get-pip.py
 RUN pip3 install --upgrade pip
-RUN pip3 install numpy~=$NUMPY_VERSION setuptools pybind11
+RUN pip3 install numpy~=$NUMPY_VERSION setuptools pybind11 wheel
 RUN ln -sf /usr/include/python$PYTHON_VERSION /usr/include/python3
 RUN ln -sf /usr/local/lib/python$PYTHON_VERSION/dist-packages/numpy/core/include/numpy /usr/include/python3/numpy
-RUN curl -OL https://github.com/Kitware/CMake/releases/download/v3.16.8/cmake-3.16.8-Linux-x86_64.sh
+RUN ln -sf /usr/bin/python$PYTHON_VERSION /usr/local/bin/python$PYTHON_VERSION
+RUN curl -OL https://github.com/Kitware/CMake/releases/download/v3.29.6/cmake-3.29.6-linux-x86_64.sh
 RUN mkdir /opt/cmake
-RUN sh cmake-3.16.8-Linux-x86_64.sh --prefix=/opt/cmake --skip-license
+RUN sh cmake-3.29.6-linux-x86_64.sh --prefix=/opt/cmake --skip-license
 RUN ln -s /opt/cmake/bin/cmake /usr/local/bin/cmake
 
 ENV CI_BUILD_PYTHON=python$PYTHON_VERSION
