@@ -29,6 +29,7 @@ if [ "${TENSORFLOW_TARGET}" = "rpi" ]; then
   export TENSORFLOW_TARGET="armhf"
 fi
 export CROSSTOOL_PYTHON_INCLUDE_PATH=$(${PYTHON} -c "from sysconfig import get_paths as gp; print(gp()['include'])")
+echo exporting CROSSTOOL_PYTHON_INCLUDE_PATH: ${CROSSTOOL_PYTHON_INCLUDE_PATH}
 
 # Fix container image for cross build.
 if [ ! -z "${CI_BUILD_HOME}" ] && [ `pwd` = "/workspace" ]; then
@@ -79,15 +80,31 @@ case "${TENSORFLOW_TARGET}" in
   aarch64)
     BAZEL_FLAGS="--config=elinux_aarch64
       --define tensorflow_mkldnn_contraction_kernel=0
-      --copt=-O3"
+      --copt=-O3
+      --define=tflite_pip_with_flex=true
+      --define=tflite_enable_xnnpack=true
+      --define=xnnpack_enable_subgraph_reshaping=true
+      --define=no_tensorflow_py_deps=true
+      --copt=-flto"
     ;;
   native)
-    BAZEL_FLAGS="--copt=-O3 --copt=-march=native"
+    BAZEL_FLAGS="--copt=-O3 --copt=-march=native
+      --copt=-mno-avx --copt=-mno-avx2 --copt=-msse4.2 --copt=-msse4.1
+      --define=tflite_pip_with_flex=true
+      --define=tflite_enable_xnnpack=true
+      --define=xnnpack_enable_subgraph_reshaping=true
+      --define=no_tensorflow_py_deps=true
+      --copt=-flto"
     ;;
   *)
     BAZEL_FLAGS="--copt=-O3"
     ;;
 esac
+# flex delegates: --define=tflite_pip_with_flex=true
+# lto options: --copt=-flto
+# pgo profile: --copt=-fprofile-generate=/tmp/profile --linkopt=-lgcov
+# pgo build: --copt=-fprofile-use=profile
+
 
 # We need to pass down the environment variable with a possible alternate Python
 # include path for Python 3.x builds to work.
