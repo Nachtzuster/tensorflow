@@ -66,7 +66,7 @@ docker-shell: docker-image
 	mkdir -p $(TENSORFLOW_DIR)/bazel-ci_build-cache
 	docker run --rm --interactive --tty \
 		$(DOCKER_PARAMS) \
-		$(TAG_IMAGE) /with_the_same_user /bin/bash
+		$(TAG_IMAGE) /bin/bash
 
 docker-build: docker-image
 	mkdir -p $(TENSORFLOW_DIR)/bazel-ci_build-cache
