@@ -33,8 +33,11 @@ if [[ "$ubuntu_version" == "18" ]]; then
 fi
 
 # Install dependencies from ubuntu deb repository.
+# if [[ "$ubuntu_version" == "20" ]]; then
 apt-key adv --keyserver keyserver.ubuntu.com --recv 084ECFC5828AB726
 apt-get update
+# apt-get install dirmngr -y
+# fi
 
 if [[ "$ubuntu_version" == "14" ]]; then
   # specifically for trusty linked from ffmpeg.org
